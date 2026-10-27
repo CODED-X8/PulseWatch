@@ -1,15 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { Skeleton } from '../components/Skeleton';
 import {
-  AlertTriangle,
   Download,
-  Filter,
   CheckCircle2,
-  Clock,
-  ExternalLink,
-  ShieldAlert,
   Flame,
 } from 'lucide-react';
 
@@ -42,16 +37,16 @@ export function IncidentsPage() {
       const res = await api.exportReport();
       addToast(
         <span>
-          Report generated!{' '}
+          CSV report generated!{' '}
           <a
             href={res.downloadUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: '#ffffff', textDecoration: 'underline', fontWeight: 600 }}
           >
-            Download PDF Report
+            Download CSV Report
           </a>{' '}
-          (valid 15m)
+          (valid {Math.round(res.expiresInSec / 60)}m)
         </span>,
         'success',
         8000
@@ -69,10 +64,10 @@ export function IncidentsPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            System Incidents & Outage Audit
+            System Incidents
           </h1>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Historical record of probe failures, multi-AZ confirmation cycles, and MTTR resolution metrics
+            Historical record of probe failures, multi-AZ confirmation cycles, and resolution duration
           </p>
         </div>
 
@@ -142,15 +137,15 @@ export function IncidentsPage() {
                 <tr style={{ backgroundColor: 'var(--bg-surface-elevated)', borderBottom: '1px solid var(--border-subtle)', textAlign: 'left', color: 'var(--text-muted)' }}>
                   <th style={{ padding: '12px 18px' }}>Target Monitor</th>
                   <th style={{ padding: '12px 18px' }}>State</th>
-                  <th style={{ padding: '12px 18px' }}>Detected At</th>
+                  <th style={{ padding: '12px 18px' }}>Started At</th>
                   <th style={{ padding: '12px 18px' }}>Resolved At</th>
-                  <th style={{ padding: '12px 18px' }}>Downtime Duration</th>
-                  <th style={{ padding: '12px 18px' }}>Root Cause Diagnosis</th>
+                  <th style={{ padding: '12px 18px' }}>Duration</th>
                 </tr>
               </thead>
               <tbody>
                 {incidents.map((inc) => {
                   const isOpen = inc.state !== 'RESOLVED';
+                  const duration = calculateDuration(inc.startedAt, inc.resolvedAt);
 
                   return (
                     <tr
@@ -195,11 +190,7 @@ export function IncidentsPage() {
                       </td>
 
                       <td className="tabular-nums font-mono" style={{ padding: '14px 18px', fontWeight: 600 }}>
-                        {inc.durationStr || 'Ongoing'}
-                      </td>
-
-                      <td style={{ padding: '14px 18px', color: 'var(--text-secondary)', maxWidth: '320px' }}>
-                        {inc.rootCause || 'Upstream gateway unresponsive'}
+                        {duration}
                       </td>
                     </tr>
                   );
@@ -211,4 +202,16 @@ export function IncidentsPage() {
       </div>
     </div>
   );
+}
+
+function calculateDuration(startStr, endStr) {
+  if (!startStr) return '—';
+  const start = new Date(startStr).getTime();
+  const end = endStr ? new Date(endStr).getTime() : Date.now();
+  const diffSec = Math.max(0, Math.floor((end - start) / 1000));
+  if (diffSec < 60) return `${diffSec}s`;
+  const mins = Math.floor(diffSec / 60);
+  const secs = diffSec % 60;
+  if (!endStr) return `${mins}m ${secs}s (ongoing)`;
+  return `${mins}m ${secs}s`;
 }

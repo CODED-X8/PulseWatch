@@ -1,13 +1,10 @@
 /**
  * PulseWatch Simulation & Background Engine
- * Handles:
- *  - Background check loop with realistic latency jitter
- *  - State machine: PENDING -> UP -> SUSPECTED (amber pulsing) -> DOWN -> UP
- *  - Single failed check NEVER triggers DOWN directly (must go through SUSPECTED)
- *  - Dev Panel simulations: Force DOWN, Recover, Scale Workers / Load Test, Instance switch, DDB failure
+ * Enforces worker scaling bounds: 1 -> 3 (WORKER_MAX configurable).
  */
 
 import { getMockStorage, saveMockStorage } from './storage';
+import { CONFIG } from '../config';
 
 let engineInterval = null;
 
@@ -16,7 +13,7 @@ export function startMockSimulationEngine() {
 
   engineInterval = setInterval(() => {
     tickSimulation();
-  }, 4000); // Ticks every 4 seconds
+  }, 4000);
 }
 
 export function stopMockSimulationEngine() {
@@ -35,30 +32,26 @@ function tickSimulation() {
   db.monitors.forEach(mon => {
     if (mon.state === 'PAUSED') return;
 
-    // Is this monitor forced DOWN by Dev Panel?
     const isForcedDown = db.forcedDownIds && db.forcedDownIds.includes(mon.id);
 
     if (isForcedDown) {
       if (mon.state === 'UP' || mon.state === 'PENDING') {
-        // Move to SUSPECTED first
         mon.state = 'SUSPECTED';
         mon.heartbeat = 'irregular';
         mon.lastCheckedAt = new Date(now).toISOString();
         mon.lastLatencyMs = 2840;
-        mon.consecutiveFailures = 1;
+        mon._consecutiveFailures = 1;
         changed = true;
       } else if (mon.state === 'SUSPECTED') {
-        // Check if it has been suspected long enough or on subsequent failure
-        mon.consecutiveFailures = (mon.consecutiveFailures || 1) + 1;
-        if (mon.consecutiveFailures >= 2) {
+        mon._consecutiveFailures = (mon._consecutiveFailures || 1) + 1;
+        if (mon._consecutiveFailures >= 2) {
           mon.state = 'DOWN';
           mon.heartbeat = 'flat';
           mon.lastCheckedAt = new Date(now).toISOString();
           mon.lastLatencyMs = 0;
-          // Append to strip
           mon.strip.shift();
           mon.strip.push('down');
-          // Open incident if not already open
+
           const hasOpen = db.incidents.find(inc => inc.monitorId === mon.id && (inc.state === 'OPEN' || inc.state === 'CONFIRMED' || inc.state === 'SUSPECTED'));
           if (!hasOpen) {
             db.incidents.unshift({
@@ -68,11 +61,10 @@ function tickSimulation() {
               startedAt: new Date(now).toISOString(),
               resolvedAt: null,
               state: 'CONFIRMED',
-              durationStr: 'In progress',
               rootCause: 'Connection reset by peer / Gateway timed out.',
             });
           }
-          // Append failure to history
+
           if (db.history[mon.id]) {
             db.history[mon.id].push({
               ts: new Date(now).toISOString(),
@@ -88,42 +80,33 @@ function tickSimulation() {
       return;
     }
 
-    // Normal healthy routine (with rare benign jitter)
     if (mon.state === 'DOWN' || mon.state === 'SUSPECTED') {
-      // If was down or suspected and not forced down, recover
       mon.state = 'UP';
       mon.heartbeat = 'steady';
-      mon.consecutiveFailures = 0;
+      mon._consecutiveFailures = 0;
       mon.lastCheckedAt = new Date(now).toISOString();
       mon.lastLatencyMs = Math.floor(25 + Math.random() * 40);
       mon.strip.shift();
       mon.strip.push('up');
       
-      // Resolve any active incidents
       db.incidents.forEach(inc => {
         if (inc.monitorId === mon.id && inc.state !== 'RESOLVED') {
           inc.state = 'RESOLVED';
           inc.resolvedAt = new Date(now).toISOString();
-          const startMs = new Date(inc.startedAt).getTime();
-          const diffSec = Math.floor((now - startMs) / 1000);
-          inc.durationStr = `${Math.floor(diffSec / 60)}m ${diffSec % 60}s`;
         }
       });
       changed = true;
     } else {
-      // Monitor is UP: apply gentle jitter
       const jitter = Math.floor(Math.random() * 12 - 6);
       const base = mon.id === 'mon-005' ? 18 : mon.id === 'mon-004' ? 32 : 55;
       mon.lastLatencyMs = Math.max(12, base + jitter);
       mon.lastCheckedAt = new Date(now).toISOString();
       
-      // Keep strip fresh periodically
       if (Math.random() > 0.85) {
         mon.strip.shift();
         mon.strip.push('up');
       }
 
-      // Add check point to history occasionally
       if (db.history && db.history[mon.id] && Math.random() > 0.6) {
         db.history[mon.id].push({
           ts: new Date(now).toISOString(),
@@ -132,7 +115,6 @@ function tickSimulation() {
           latencyMs: mon.lastLatencyMs,
           error: null,
         });
-        // Keep max 200 history items in memory
         if (db.history[mon.id].length > 200) {
           db.history[mon.id].shift();
         }
@@ -141,17 +123,16 @@ function tickSimulation() {
     }
   });
 
-  // 2. Load test decay / Worker fleet scaling simulation
+  // 2. Load test decay / Worker fleet scaling simulation (1 -> max configured in CONFIG.WORKER_MAX)
   if (db.system) {
     if (db.system.loadTestActive) {
-      if (db.system.queueDepth > 10) {
-        // Drain slowly
-        db.system.queueDepth = Math.max(4, db.system.queueDepth - 15);
-        db.system.inFlight = Math.max(5, db.system.inFlight - 8);
-        if (db.system.queueDepth <= 10) {
+      if (db.system.queueDepth > 5) {
+        db.system.queueDepth = Math.max(4, db.system.queueDepth - 12);
+        db.system.inFlight = Math.max(2, db.system.inFlight - 6);
+        if (db.system.queueDepth <= 5) {
           db.system.loadTestActive = false;
-          // Scale back workers to 3
-          db.system.workers = db.system.workers.slice(0, 3);
+          // Scale back workers to baseline (min 1)
+          db.system.workers = db.system.workers.slice(0, CONFIG.WORKER_MIN || 1);
           changed = true;
         }
       }
@@ -170,12 +151,11 @@ export const devPanel = {
     if (!db.forcedDownIds) db.forcedDownIds = [];
     if (!db.forcedDownIds.includes(monitorId)) {
       db.forcedDownIds.push(monitorId);
-      // Immediately set monitor to SUSPECTED to show state flow
       const mon = db.monitors.find(m => m.id === monitorId);
       if (mon && mon.state === 'UP') {
         mon.state = 'SUSPECTED';
         mon.heartbeat = 'irregular';
-        mon.consecutiveFailures = 1;
+        mon._consecutiveFailures = 1;
         mon.lastCheckedAt = new Date().toISOString();
       }
       saveMockStorage(db);
@@ -191,19 +171,15 @@ export const devPanel = {
     if (mon) {
       mon.state = 'UP';
       mon.heartbeat = 'steady';
-      mon.consecutiveFailures = 0;
+      mon._consecutiveFailures = 0;
       mon.lastCheckedAt = new Date().toISOString();
       mon.lastLatencyMs = 45;
     }
-    // Resolve incidents for this monitor
     const now = Date.now();
     db.incidents.forEach(inc => {
       if (inc.monitorId === monitorId && inc.state !== 'RESOLVED') {
         inc.state = 'RESOLVED';
         inc.resolvedAt = new Date(now).toISOString();
-        const startMs = new Date(inc.startedAt).getTime();
-        const diffSec = Math.floor((now - startMs) / 1000);
-        inc.durationStr = `${Math.floor(diffSec / 60)}m ${diffSec % 60}s`;
       }
     });
     saveMockStorage(db);
@@ -213,17 +189,16 @@ export const devPanel = {
     const db = getMockStorage();
     if (!db.system) return;
     db.system.loadTestActive = true;
-    db.system.queueDepth = 480;
-    db.system.inFlight = 92;
-    // Auto-scale workers from 3 to 6
-    db.system.workers = [
-      { id: 'wrk-01', az: 'ap-south-1a', status: 'HEALTHY', activeChecks: 18, cpuPercent: 82, lastHeartbeatSec: 1 },
-      { id: 'wrk-02', az: 'ap-south-1b', status: 'HEALTHY', activeChecks: 19, cpuPercent: 88, lastHeartbeatSec: 1 },
-      { id: 'wrk-03', az: 'ap-south-1c', status: 'HEALTHY', activeChecks: 17, cpuPercent: 79, lastHeartbeatSec: 2 },
-      { id: 'wrk-04', az: 'ap-south-1a', status: 'SCALED_OUT', activeChecks: 16, cpuPercent: 74, lastHeartbeatSec: 1 },
-      { id: 'wrk-05', az: 'ap-south-1b', status: 'SCALED_OUT', activeChecks: 12, cpuPercent: 68, lastHeartbeatSec: 2 },
-      { id: 'wrk-06', az: 'ap-south-1c', status: 'SCALED_OUT', activeChecks: 10, cpuPercent: 59, lastHeartbeatSec: 1 },
+    db.system.queueDepth = 320;
+    db.system.inFlight = 48;
+    
+    // Scale out workers up to CONFIG.WORKER_MAX (default 3)
+    const workerPool = [
+      { id: 'wrk-01', az: 'ap-south-1a', status: 'HEALTHY', activeChecks: 14, cpuPercent: 82, lastHeartbeatSec: 1 },
+      { id: 'wrk-02', az: 'ap-south-1b', status: 'SCALED_OUT', activeChecks: 16, cpuPercent: 78, lastHeartbeatSec: 1 },
+      { id: 'wrk-03', az: 'ap-south-1c', status: 'SCALED_OUT', activeChecks: 12, cpuPercent: 71, lastHeartbeatSec: 2 },
     ];
+    db.system.workers = workerPool.slice(0, CONFIG.WORKER_MAX || 3);
     saveMockStorage(db);
   },
 
@@ -247,6 +222,6 @@ export const devPanel = {
 
   resetAll: () => {
     localStorage.removeItem('pulsewatch_mock_db_v1');
-    getMockStorage(); // Will reseed fresh
+    getMockStorage();
   }
 };

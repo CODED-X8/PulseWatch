@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { devPanel } from '../mock/engine';
 import { api } from '../api/client';
 import { CONFIG } from '../config';
-import { X, Flame, ShieldAlert, Cpu, Database, RefreshCw, Server, AlertOctagon } from 'lucide-react';
+import { X, Flame, ShieldAlert, Cpu, Database, RefreshCw, Server } from 'lucide-react';
 
 export function DevPanel() {
   const { isDevPanelOpen, setIsDevPanelOpen, addToast } = useApp();
@@ -37,7 +37,7 @@ export function DevPanel() {
 
   const handleLoadTest = () => {
     devPanel.triggerLoadTest();
-    addToast('Simulating SQS spike: queueDepth -> 480, workers auto-scaled 3 -> 6.', 'info');
+    addToast(`Simulating SQS spike: queueDepth -> 320, workers auto-scaled ${CONFIG.WORKER_MIN} -> ${CONFIG.WORKER_MAX}.`, 'info');
   };
 
   const handleInstanceSwitch = () => {
@@ -170,7 +170,7 @@ export function DevPanel() {
             style={{ width: '100%', padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
             <Cpu size={14} color="var(--accent-cyan)" />
-            Simulate SQS Load (Auto-Scale 3→6)
+            Simulate SQS Load (Auto-Scale {CONFIG.WORKER_MIN}→{CONFIG.WORKER_MAX})
           </button>
 
           <button

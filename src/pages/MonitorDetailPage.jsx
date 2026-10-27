@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useApp } from '../context/AppContext';
@@ -17,11 +17,8 @@ import {
   Edit2,
   Trash2,
   ExternalLink,
-  ShieldAlert,
-  Clock,
-  CheckCircle2,
   AlertTriangle,
-  RefreshCw,
+  CheckCircle2,
 } from 'lucide-react';
 
 export function MonitorDetailPage() {
@@ -34,13 +31,12 @@ export function MonitorDetailPage() {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [historyFailed, setHistoryFailed] = useState(false);
-  const [timeRange, setTimeRange] = useState('24h'); // '1h' | '24h' | '7d'
+  const [timeRange, setTimeRange] = useState('24h');
 
   // Modals & Dialogs
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  // Load monitor details & history
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -53,7 +49,6 @@ export function MonitorDetailPage() {
       }
       setMonitor(target);
 
-      // Fetch history with defensive fallback
       try {
         const histData = await api.getMonitorHistory(id, timeRange);
         setHistory(histData);
@@ -63,7 +58,6 @@ export function MonitorDetailPage() {
         setHistoryFailed(true);
       }
 
-      // Fetch incidents
       try {
         const incData = await api.getIncidents();
         setIncidents(incData.filter((i) => i.monitorId === id));
@@ -232,7 +226,6 @@ export function MonitorDetailPage() {
             </p>
           </div>
 
-          {/* Time range selector tabs */}
           <div
             style={{
               display: 'flex',
@@ -264,7 +257,6 @@ export function MonitorDetailPage() {
           </div>
         </div>
 
-        {/* Chart render or fallback */}
         {historyFailed ? (
           <div
             style={{
@@ -312,7 +304,7 @@ export function MonitorDetailPage() {
                   <th style={{ padding: '8px 10px' }}>Status</th>
                   <th style={{ padding: '8px 10px' }}>Code</th>
                   <th style={{ padding: '8px 10px' }}>Latency</th>
-                  <th style={{ padding: '8px 10px' }}>Diagnostic</th>
+                  <th style={{ padding: '8px 10px' }}>Error Details</th>
                 </tr>
               </thead>
               <tbody>
@@ -338,7 +330,7 @@ export function MonitorDetailPage() {
                       {chk.latencyMs}ms
                     </td>
                     <td style={{ padding: '10px 10px', color: chk.error ? 'var(--status-down)' : 'var(--text-muted)' }}>
-                      {chk.error || 'Nominal 200 OK'}
+                      {chk.error || 'None (200 OK)'}
                     </td>
                   </tr>
                 ))}
@@ -347,7 +339,7 @@ export function MonitorDetailPage() {
           </div>
         </div>
 
-        {/* Monitor Incidents */}
+        {/* Monitor Incidents (Strict contract fields: startedAt, resolvedAt, state) */}
         <div className="card-surface" style={{ padding: '20px' }}>
           <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '14px' }}>
             Incidents for this Monitor
@@ -359,43 +351,52 @@ export function MonitorDetailPage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {incidents.map((inc) => (
-                <div
-                  key={inc.id}
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: 'var(--bg-surface-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {inc.rootCause || 'Unscheduled Ingress Outage'}
-                    </span>
-                    <span
-                      className="font-mono"
-                      style={{
-                        fontSize: '0.7rem',
-                        padding: '2px 6px',
-                        borderRadius: 'var(--radius-sm)',
-                        backgroundColor: inc.state === 'RESOLVED' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(244, 63, 94, 0.15)',
-                        color: inc.state === 'RESOLVED' ? 'var(--status-up)' : 'var(--status-down)',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {inc.state}
-                    </span>
+              {incidents.map((inc) => {
+                const duration = formatDuration(inc.startedAt, inc.resolvedAt);
+
+                return (
+                  <div
+                    key={inc.id}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--bg-surface-elevated)',
+                      border: '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {inc.monitorName}
+                      </span>
+                      <span
+                        className="font-mono"
+                        style={{
+                          fontSize: '0.7rem',
+                          padding: '2px 6px',
+                          borderRadius: 'var(--radius-sm)',
+                          backgroundColor: inc.state === 'RESOLVED' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                          color: inc.state === 'RESOLVED' ? 'var(--status-up)' : 'var(--status-down)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {inc.state}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                      <span>Started: {new Date(inc.startedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                      <span>Duration: {duration}</span>
+                    </div>
+                    {inc.rootCause && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: '2px' }}>
+                        Diagnostic: {inc.rootCause}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                    <span>Started: {new Date(inc.startedAt).toLocaleString()}</span>
-                    <span>Duration: {inc.durationStr || 'Ongoing'}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -421,4 +422,16 @@ export function MonitorDetailPage() {
       />
     </div>
   );
+}
+
+function formatDuration(startStr, endStr) {
+  if (!startStr) return '—';
+  const start = new Date(startStr).getTime();
+  const end = endStr ? new Date(endStr).getTime() : Date.now();
+  const diffSec = Math.max(0, Math.floor((end - start) / 1000));
+  if (diffSec < 60) return `${diffSec}s`;
+  const mins = Math.floor(diffSec / 60);
+  const secs = diffSec % 60;
+  if (!endStr) return `${mins}m ${secs}s (ongoing)`;
+  return `${mins}m ${secs}s`;
 }

@@ -3,21 +3,23 @@
  * 
  * Strict Single-Source Architecture:
  * - When CONFIG.API_MODE === 'mock', invokes browser mock handlers with 80-300ms simulated network latency.
- * - When CONFIG.API_MODE === 'real', dispatches real fetch() to CONFIG.API_BASE_URL.
+ * - When CONFIG.API_MODE === 'real', dispatches real fetch() to CONFIG.API_BASE_URL (defaults to empty string for same-origin CloudFront routing).
  * 
- * Pages and components never know whether mock or real is active.
+ * In real mode:
+ * - Sends 'Authorization: Bearer <token>'
+ * - 401 redirects to #/login and clears session
+ * - AbortController timeout with friendly error
+ * - Unified ApiResponseError for seamless UI handling
  */
 
 import { CONFIG } from '../config';
 import { getMockStorage, saveMockStorage } from '../mock/storage';
 import { startMockSimulationEngine } from '../mock/engine';
 
-// Start simulation engine immediately in mock mode
 if (CONFIG.API_MODE === 'mock') {
   startMockSimulationEngine();
 }
 
-// Token helper stored in sessionStorage
 export const authStorage = {
   getToken: () => sessionStorage.getItem('pulsewatch_token'),
   setToken: (token) => sessionStorage.setItem('pulsewatch_token', token),
@@ -29,25 +31,21 @@ export const authStorage = {
   setUser: (user) => sessionStorage.setItem('pulsewatch_user', JSON.stringify(user)),
 };
 
-// Simulate 80-300ms random network latency
 const mockDelay = () => {
   const ms = Math.floor(Math.random() * (300 - 80 + 1)) + 80;
   return new Promise(resolve => setTimeout(resolve, ms));
 };
 
-// Generic response wrapper
-class ApiResponseError extends Error {
+export class ApiResponseError extends Error {
   constructor(message, status = 400) {
     super(message);
+    this.name = 'ApiResponseError';
     this.status = status;
   }
 }
 
-/**
- * Unified API Interface
- */
 export const api = {
-  // POST /api/auth/register
+  // POST /api/auth/register {email,password} -> {token,user}
   register: async ({ email, password }) => {
     if (CONFIG.API_MODE === 'real') {
       return realFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) });
@@ -68,7 +66,7 @@ export const api = {
     return { token, user };
   },
 
-  // POST /api/auth/login
+  // POST /api/auth/login {email,password} -> {token,user}
   login: async ({ email, password }) => {
     if (CONFIG.API_MODE === 'real') {
       return realFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
@@ -89,7 +87,7 @@ export const api = {
     return { token, user };
   },
 
-  // GET /api/summary
+  // GET /api/summary -> {up,down,suspected,paused,uptime24h,avgLatency24h,spark:[numbers]}
   getSummary: async () => {
     if (CONFIG.API_MODE === 'real') {
       return realFetch('/api/summary');
@@ -122,7 +120,6 @@ export const api = {
       ? Number((monitors.reduce((acc, m) => acc + (m.uptime24h || 100), 0) / monitors.length).toFixed(2))
       : 100.0;
 
-    // Sparkline points (10 numbers for mini trends)
     const spark = [44, 46, 42, 48, 45, 49, 52, 47, 46, avgLatency24h];
 
     return {
@@ -136,7 +133,7 @@ export const api = {
     };
   },
 
-  // GET /api/monitors
+  // GET /api/monitors -> [{id,name,url,intervalMin,expectedStatus,timeoutSec,state,lastCheckedAt,lastLatencyMs,uptime24h,strip,heartbeat}]
   getMonitors: async () => {
     if (CONFIG.API_MODE === 'real') {
       return realFetch('/api/monitors');
@@ -154,7 +151,6 @@ export const api = {
     await mockDelay();
     const db = getMockStorage();
 
-    // Validations
     validateMonitorInput(monitorData, db.monitors);
 
     if (db.monitors.length >= CONFIG.MAX_MONITORS_PER_USER) {
@@ -174,7 +170,6 @@ export const api = {
       uptime24h: 100.0,
       strip: Array(90).fill('up'),
       heartbeat: 'steady',
-      consecutiveFailures: 0,
     };
 
     db.monitors.unshift(newMonitor);
@@ -190,7 +185,6 @@ export const api = {
 
     saveMockStorage(db);
 
-    // Transition PENDING to UP after 2.5s simulated ping
     setTimeout(() => {
       const liveDb = getMockStorage();
       const target = liveDb.monitors.find(m => m.id === newMonitor.id);
@@ -273,7 +267,7 @@ export const api = {
     return target;
   },
 
-  // GET /api/monitors/:id/history?range=1h|24h|7d
+  // GET /api/monitors/:id/history?range=1h|24h|7d -> [{ts,status,httpCode,latencyMs,error}]
   getMonitorHistory: async (id, range = '24h') => {
     if (CONFIG.API_MODE === 'real') {
       return realFetch(`/api/monitors/${id}/history?range=${range}`);
@@ -287,7 +281,7 @@ export const api = {
     return historyList.filter(item => (now - new Date(item.ts).getTime()) <= rangeMs);
   },
 
-  // GET /api/incidents?state=open|resolved
+  // GET /api/incidents?state=open|resolved -> [{id,monitorId,monitorName,startedAt,resolvedAt,state}]
   getIncidents: async (stateFilter) => {
     if (CONFIG.API_MODE === 'real') {
       const q = stateFilter ? `?state=${stateFilter}` : '';
@@ -304,7 +298,7 @@ export const api = {
     return list;
   },
 
-  // POST /api/reports/export
+  // POST /api/reports/export -> {downloadUrl, expiresInSec} (Strictly CSV report link)
   exportReport: async () => {
     if (CONFIG.API_MODE === 'real') {
       return realFetch('/api/reports/export', { method: 'POST' });
@@ -312,13 +306,12 @@ export const api = {
     await mockDelay();
     const expiry = 900; // 15 mins
     return {
-      downloadUrl: `https://pulsewatch-reports-export.s3.ap-south-1.amazonaws.com/reports/incident_summary_${Date.now()}.pdf?signature=signed_url_token`,
+      downloadUrl: `https://pulsewatch-reports-export.s3.ap-south-1.amazonaws.com/reports/incident_audit_${Date.now()}.csv?signature=presigned_s3_token`,
       expiresInSec: expiry,
-      generatedAt: new Date().toISOString(),
     };
   },
 
-  // GET /api/system
+  // GET /api/system -> {instanceId,az,queueDepth,inFlight,dlq,workers,deps:{rds,ddb,sqs}}
   getSystemStatus: async () => {
     if (CONFIG.API_MODE === 'real') {
       return realFetch('/api/system');
@@ -328,20 +321,16 @@ export const api = {
     return db.system;
   },
 
-  // GET /api/health
+  // GET /api/health -> {ok:true}
   getHealth: async () => {
     if (CONFIG.API_MODE === 'real') {
       return realFetch('/api/health');
     }
     await mockDelay();
-    return { ok: true, timestamp: new Date().toISOString() };
+    return { ok: true };
   },
 };
 
-/**
- * Validation Helper
- * Ensures HTTP/HTTPS only, max 2048 chars, no duplicate URL per user, blocks private hosts (SSRF prevention)
- */
 function validateMonitorInput(data, existingMonitors, currentId = null) {
   if (!data.name || data.name.trim().length === 0) {
     throw new ApiResponseError('Monitor name is required.', 400);
@@ -364,17 +353,13 @@ function validateMonitorInput(data, existingMonitors, currentId = null) {
     throw new ApiResponseError('Only HTTP and HTTPS protocols are supported.', 400);
   }
 
-  // Duplicate URL check
   const duplicate = existingMonitors.find(m => m.url.toLowerCase() === data.url.trim().toLowerCase() && m.id !== currentId);
   if (duplicate) {
     throw new ApiResponseError(`A monitor for URL "${data.url}" already exists (${duplicate.name}).`, 409);
   }
 
-  // SSRF Protection: Private Host Blocking
   const hostname = parsedUrl.hostname.toLowerCase();
   const hostWithPort = parsedUrl.host.toLowerCase();
-
-  // Allow explicitly whitelisted private hosts
   const isWhitelisted = CONFIG.ALLOWED_PRIVATE_HOSTS.some(allowed => allowed.toLowerCase() === hostWithPort || allowed.toLowerCase() === hostname);
 
   if (!isWhitelisted) {
@@ -383,7 +368,7 @@ function validateMonitorInput(data, existingMonitors, currentId = null) {
       hostname.startsWith('127.') ||
       hostname.startsWith('10.') ||
       hostname.startsWith('192.168.') ||
-      hostname.startsWith('169.254.') || // Link-local / AWS metadata
+      hostname.startsWith('169.254.') ||
       /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)
     ) {
       throw new ApiResponseError(
@@ -395,7 +380,7 @@ function validateMonitorInput(data, existingMonitors, currentId = null) {
 }
 
 /**
- * Real Backend Fetch Helper
+ * Real Backend Fetch Helper with Timeout & Bearer Token
  */
 async function realFetch(endpoint, options = {}) {
   const token = authStorage.getToken();
@@ -405,10 +390,27 @@ async function realFetch(endpoint, options = {}) {
     ...(options.headers || {}),
   };
 
-  const response = await fetch(`${CONFIG.API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT_MS || 10000);
+
+  const fullUrl = `${CONFIG.API_BASE_URL || ''}${endpoint}`;
+
+  let response;
+  try {
+    response = await fetch(fullUrl, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new ApiResponseError(`Backend request timed out after ${(CONFIG.REQUEST_TIMEOUT_MS || 10000) / 1000}s. Please check network connectivity.`, 504);
+    }
+    throw new ApiResponseError(`Network error reaching backend: ${err.message || 'Connection refused'}`, 503);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (response.status === 401) {
     authStorage.clearToken();

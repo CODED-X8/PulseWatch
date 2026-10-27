@@ -209,7 +209,8 @@ Returns synthetic check data points within the specified time range.
 ## 4. Incidents & Reports
 
 ### `GET /api/incidents?state=open|resolved`
-Lists detected incidents.
+Lists detected incidents. State must be `SUSPECTED`, `CONFIRMED`, or `RESOLVED`.
+`rootCause` is an optional diagnostic string that may be populated by the Step Functions incident analyzer.
 
 **Response (200 OK):**
 ```json
@@ -221,7 +222,6 @@ Lists detected incidents.
     "startedAt": "2026-10-23T11:42:00.000Z",
     "resolvedAt": "2026-10-23T11:50:14.000Z",
     "state": "RESOLVED",
-    "durationStr": "8m 14s",
     "rootCause": "Connection pool saturation on RDS Read Replica."
   }
 ]
@@ -230,14 +230,13 @@ Lists detected incidents.
 ---
 
 ### `POST /api/reports/export`
-Generates a pre-signed S3 download URL for an incident audit report.
+Generates a pre-signed S3 download link for an incident CSV report.
 
 **Response (200 OK):**
 ```json
 {
-  "downloadUrl": "https://pulsewatch-reports.s3.ap-south-1.amazonaws.com/incident_summary.pdf?AWSAccessKeyId=...",
-  "expiresInSec": 900,
-  "generatedAt": "2026-10-27T06:36:00.000Z"
+  "downloadUrl": "https://pulsewatch-reports.s3.ap-south-1.amazonaws.com/incident_audit.csv?AWSAccessKeyId=...",
+  "expiresInSec": 900
 }
 ```
 
@@ -247,6 +246,7 @@ Generates a pre-signed S3 download URL for an incident audit report.
 
 ### `GET /api/system`
 Returns distributed fleet telemetry for the Reactor Panel.
+The worker Auto Scaling Group is configured for `min: 1`, `max: 3` instances.
 
 **Response (200 OK):**
 ```json
@@ -254,12 +254,10 @@ Returns distributed fleet telemetry for the Reactor Panel.
   "instanceId": "i-09ab7f4122dca8f10",
   "az": "ap-south-1a",
   "queueDepth": 4,
-  "inFlight": 6,
+  "inFlight": 2,
   "dlq": 0,
   "workers": [
-    { "id": "wrk-01", "az": "ap-south-1a", "status": "HEALTHY", "activeChecks": 2, "cpuPercent": 24, "lastHeartbeatSec": 2 },
-    { "id": "wrk-02", "az": "ap-south-1b", "status": "HEALTHY", "activeChecks": 3, "cpuPercent": 31, "lastHeartbeatSec": 1 },
-    { "id": "wrk-03", "az": "ap-south-1c", "status": "HEALTHY", "activeChecks": 1, "cpuPercent": 19, "lastHeartbeatSec": 3 }
+    { "id": "wrk-01", "az": "ap-south-1a", "status": "HEALTHY", "activeChecks": 2, "cpuPercent": 24, "lastHeartbeatSec": 2 }
   ],
   "deps": {
     "rds": "HEALTHY",

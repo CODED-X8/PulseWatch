@@ -22,8 +22,8 @@ Designed for production deployment to **Amazon Web Services (AWS ap-south-1)** u
   - `PENDING -> UP -> SUSPECTED -> DOWN -> UP`.
   - A single failed check *never* triggers DOWN, preventing false alarm fatigue.
 - **SSRF Attack Protection**: Built-in validation blocks RFC 1918 private CIDR blocks and AWS metadata endpoints (`169.254.x`) unless whitelisted.
-- **Interactive System Reactor Panel**: Monitors serving EC2 API instances, SQS ingress queue depth, dead-letter queues, and dynamic worker nodes that glow and scale out under load.
-- **Developer Chaos Control Panel (`Ctrl+Shift+D`)**: Trigger outages, simulate packet loss, test SQS worker scaling, and switch ALB availability zones.
+- **Interactive System Reactor Panel**: Monitors serving EC2 API instances, SQS ingress queue depth, dead-letter queues, and dynamic worker nodes that glow and scale out (1 to 3 workers) under load.
+- **Developer Chaos Control Panel (`Ctrl+Shift+D`)**: Trigger outages, simulate packet loss, test SQS worker scaling (1 -> 3), and switch ALB availability zones.
 - **Keyboard-Driven Command Palette (`Ctrl+K`)**: Rapidly search monitors, jump across views, and toggle dark/light theme.
 
 ---
@@ -49,7 +49,7 @@ The application will launch at `http://localhost:5173/`.
 ```bash
 npm run build
 ```
-Generates a static production bundle in `dist/`, fully optimized and self-contained with relative asset linking for direct deployment to Amazon S3.
+Generates a static production bundle in `dist/`, fully optimized and self-contained with relative asset linking (`base: "./"`) for direct deployment to Amazon S3 without rewrite rules. Total distribution size excluding fonts is under 330 KB.
 
 ---
 
@@ -63,12 +63,18 @@ export const CONFIG = {
   // Change from 'mock' to 'real'
   API_MODE: 'real',
 
-  // Provide your AWS Application Load Balancer endpoint
-  API_BASE_URL: 'https://api.yourdomain.com',
+  // Defaults to '' (relative path) because CloudFront routes /api/* to the backend ALB
+  API_BASE_URL: '',
 
   // Allowed private hosts bypass (optional)
   ALLOWED_PRIVATE_HOSTS: ['127.0.0.1:8080'],
-  ...
+  
+  // Worker Auto Scaling Group bounds
+  WORKER_MIN: 1,
+  WORKER_MAX: 3,
+
+  // Real backend timeout (ms)
+  REQUEST_TIMEOUT_MS: 10000,
 };
 ```
 
@@ -78,8 +84,26 @@ When `API_MODE` is `'mock'`:
 - Background simulation continuously updates checks and resolves active incidents.
 
 When `API_MODE` is `'real'`:
-- All requests dispatch standard HTTP calls with Bearer JWT tokens to the AWS ALB.
-- 401 Unauthorized responses automatically redirect to the login screen.
+- Requests are dispatched via standard `fetch()` with `Authorization: Bearer <token>`.
+- Any 401 Unauthorized response clears the session and sends the user to `#/login`.
+- Network errors or timeouts (>10s) trigger a friendly banner and error toast while keeping last-known data visible.
+
+### Testing Real Mode with the Included Stub Server
+
+A minimal, zero-dependency Node.js stub server is provided in `stub-server.js`:
+
+```bash
+# In one terminal, start the stub backend:
+node stub-server.js
+
+# In src/config.js, temporarily point to the stub:
+# API_MODE: 'real'
+# API_BASE_URL: 'http://localhost:4000'
+
+# In another terminal, launch the dev server:
+npm run dev
+```
+This lets you verify real HTTP requests, CORS headers, and bearer authentication before AWS infrastructure is deployed.
 
 ---
 
@@ -95,36 +119,41 @@ When `API_MODE` is `'real'`:
 
 ## Application Screenshots
 
-> *Below are visual documentation anchors for presentation and viva demonstrations.*
+Captured directly from the running web application:
 
 ### 1. Telemetry Dashboard (1440px Desktop)
-![Dashboard Overview Placeholder](docs/screenshots/dashboard_desktop.png)
+![Dashboard Overview](docs/screenshots/dashboard_desktop.png)
 *Displays 4 sparkline stat cards, auto-refresh ticker, filter bar, and monitor cards with live ECG heartbeats and 30-day strips.*
 
 ### 2. Deep Monitor Inspection & SVG Latency Chart
-![Monitor Detail Placeholder](docs/screenshots/monitor_detail.png)
+![Monitor Detail](docs/screenshots/monitor_detail.png)
 *Detailed response time area chart with crosshair hover tooltips, 90-day strip, and synthetic probe table.*
 
 ### 3. Outage & Multi-Probe Confirmation Sequence
-![Outage Sequence Placeholder](docs/screenshots/outage_sequence.png)
+![Outage Sequence](docs/screenshots/outage_sequence.png)
 *Demonstrates the critical state transition: `UP` -> `SUSPECTED` (pulsing amber) -> `DOWN` (flatline) -> `UP` (recovery).*
 
-### 4. System Reactor Panel & Auto-Scaling Worker Fleet
-![System Reactor Placeholder](docs/screenshots/system_reactor.png)
-*Displays EC2 instance AZ, SQS queue depths, and worker fleet scaling dynamically from 3 to 6 glowing nodes during a load spike.*
+### 4. System Incidents Ledger
+![Incidents Ledger](docs/screenshots/incidents.png)
+*Audit record of probe failures, state transitions, durations, and CSV report export link.*
 
-### 5. AWS Architecture & Subsystems (About Page)
-![Architecture Blueprint Placeholder](docs/screenshots/architecture_blueprint.png)
+### 5. System Reactor Panel & Auto-Scaling Worker Fleet
+![System Reactor](docs/screenshots/system_reactor.png)
+*Displays EC2 instance AZ, SQS queue depths, and worker fleet scaling dynamically from 1 to 3 glowing nodes during a load spike.*
+
+### 6. AWS Architecture & Subsystems (About Page)
+![Architecture Blueprint](docs/screenshots/architecture_blueprint.png)
 *Interactive SVG topology mapping CloudFront, ALB, EC2 ASGs, SQS, DynamoDB Streams, and Step Functions.*
 
-### 6. Command Palette (`Ctrl+K`)
-![Command Palette Placeholder](docs/screenshots/command_palette.png)
-*Fuzzy search across all registered monitors and instant navigation.*
-
-### 7. Mobile Viewport (360px)
-![Mobile Experience Placeholder](docs/screenshots/mobile_view.png)
-*Sidebar transforms into an ergonomic bottom tab bar with touch-optimized controls.*
+### 7. Command Palette (`Ctrl+K`)
+![Command Palette](docs/screenshots/command_palette.png)
+*Fuzzy search across all registered monitors and instant keyboard navigation.*
 
 ### 8. Light Theme Option
-![Light Theme Placeholder](docs/screenshots/light_theme.png)
+![Light Theme](docs/screenshots/light_theme.png)
 *High-contrast clean daylight palette toggled via user preference and persisted in `localStorage`.*
+
+### 9. Mobile Viewport (360px Dashboard & Detail)
+![Mobile Dashboard](docs/screenshots/mobile_view.png)
+![Mobile Detail](docs/screenshots/mobile_detail.png)
+*Desktop sidebar transforms into an ergonomic bottom tab bar with touch-optimized controls.*

@@ -1,6 +1,7 @@
 /**
  * Mock Data Storage & Seed Engine
  * Persisted in browser localStorage under 'pulsewatch_mock_db_v1'
+ * Matches docs/API_CONTRACT.md strictly.
  */
 
 const STORAGE_KEY = 'pulsewatch_mock_db_v1';
@@ -44,7 +45,7 @@ function createInitialSeed() {
     return strip;
   };
 
-  // Seed 6 realistic monitors
+  // Seed 6 realistic monitors strictly matching contract
   const monitors = [
     {
       id: 'mon-001',
@@ -58,8 +59,7 @@ function createInitialSeed() {
       lastLatencyMs: 42,
       uptime24h: 99.98,
       strip: generateStrip(0.99),
-      heartbeat: 'steady', // 'steady' | 'irregular' | 'flat'
-      consecutiveFailures: 0,
+      heartbeat: 'steady',
     },
     {
       id: 'mon-002',
@@ -74,7 +74,6 @@ function createInitialSeed() {
       uptime24h: 99.85,
       strip: generateStrip(0.98),
       heartbeat: 'steady',
-      consecutiveFailures: 0,
     },
     {
       id: 'mon-003',
@@ -89,7 +88,6 @@ function createInitialSeed() {
       uptime24h: 99.64,
       strip: generateStrip(0.97),
       heartbeat: 'steady',
-      consecutiveFailures: 0,
     },
     {
       id: 'mon-004',
@@ -104,7 +102,6 @@ function createInitialSeed() {
       uptime24h: 99.99,
       strip: generateStrip(0.995),
       heartbeat: 'steady',
-      consecutiveFailures: 0,
     },
     {
       id: 'mon-005',
@@ -119,7 +116,6 @@ function createInitialSeed() {
       uptime24h: 100.0,
       strip: generateStrip(1.0),
       heartbeat: 'steady',
-      consecutiveFailures: 0,
     },
     {
       id: 'mon-006',
@@ -134,11 +130,11 @@ function createInitialSeed() {
       uptime24h: 99.12,
       strip: generateStrip(0.95),
       heartbeat: 'steady',
-      consecutiveFailures: 0,
     },
   ];
 
-  // Seed 3 past incidents
+  // Seed 3 past incidents strictly matching contract: {id, monitorId, monitorName, startedAt, resolvedAt, state}
+  // Optional field: rootCause
   const incidents = [
     {
       id: 'inc-101',
@@ -147,8 +143,7 @@ function createInitialSeed() {
       startedAt: new Date(now - 4 * ONE_DAY).toISOString(),
       resolvedAt: new Date(now - 4 * ONE_DAY + 8 * ONE_MIN).toISOString(),
       state: 'RESOLVED',
-      durationStr: '8m 14s',
-      rootCause: 'Connection pool saturation on RDS Read Replica during scheduled database index re-build.',
+      rootCause: 'Connection pool saturation on RDS Read Replica during scheduled index re-build.',
     },
     {
       id: 'inc-102',
@@ -157,7 +152,6 @@ function createInitialSeed() {
       startedAt: new Date(now - 12 * ONE_DAY).toISOString(),
       resolvedAt: new Date(now - 12 * ONE_DAY + 4 * ONE_MIN + 30000).toISOString(),
       state: 'RESOLVED',
-      durationStr: '4m 30s',
       rootCause: 'Upstream gateway 504 Gateway Timeout during DNS failover sequence.',
     },
     {
@@ -167,28 +161,25 @@ function createInitialSeed() {
       startedAt: new Date(now - 22 * ONE_DAY).toISOString(),
       resolvedAt: new Date(now - 22 * ONE_DAY + 14 * ONE_MIN).toISOString(),
       state: 'RESOLVED',
-      durationStr: '14m 02s',
       rootCause: 'OOM kill on ECS container task following burst spike in credential refresh requests.',
     },
   ];
 
-  // Pre-seed 30 days of history for each monitor
+  // Pre-seed history for each monitor
   const history = {};
   monitors.forEach(mon => {
     history[mon.id] = generateHistoryForMonitor(mon.id, now);
   });
 
-  // Seed system reactor metrics
+  // Seed system reactor metrics (Worker ASG baseline: 1 worker; scales 1 -> 3)
   const system = {
     instanceId: 'i-09ab7f4122dca8f10',
     az: 'ap-south-1a',
     queueDepth: 4,
-    inFlight: 6,
+    inFlight: 2,
     dlq: 0,
     workers: [
-      { id: 'wrk-01', az: 'ap-south-1a', status: 'HEALTHY', activeChecks: 2, cpuPercent: 24, lastHeartbeatSec: 2 },
-      { id: 'wrk-02', az: 'ap-south-1b', status: 'HEALTHY', activeChecks: 3, cpuPercent: 31, lastHeartbeatSec: 1 },
-      { id: 'wrk-03', az: 'ap-south-1c', status: 'HEALTHY', activeChecks: 1, cpuPercent: 19, lastHeartbeatSec: 3 },
+      { id: 'wrk-01', az: 'ap-south-1a', status: 'HEALTHY', activeChecks: 2, cpuPercent: 28, lastHeartbeatSec: 2 },
     ],
     deps: {
       rds: 'HEALTHY',
@@ -209,18 +200,16 @@ function createInitialSeed() {
     incidents,
     history,
     system,
-    forcedDownIds: [], // IDs manually triggered down by Dev Panel
+    forcedDownIds: [],
   };
 }
 
-// Generate realistic check points across 30 days
 function generateHistoryForMonitor(monitorId, now) {
   const points = [];
   const ONE_MIN = 60 * 1000;
   const ONE_HOUR = 60 * ONE_MIN;
   const ONE_DAY = 24 * ONE_HOUR;
 
-  // Recent 60 checks (1 per minute for last hour)
   for (let i = 60; i >= 0; i--) {
     const ts = now - i * ONE_MIN;
     const baseLatency = monitorId === 'mon-005' ? 18 : monitorId === 'mon-004' ? 32 : monitorId === 'mon-001' ? 45 : 75;
@@ -234,7 +223,6 @@ function generateHistoryForMonitor(monitorId, now) {
     });
   }
 
-  // 24h sample points (every 30 mins)
   for (let i = 48; i >= 2; i--) {
     const ts = now - i * 30 * ONE_MIN;
     const baseLatency = 45;
@@ -248,7 +236,6 @@ function generateHistoryForMonitor(monitorId, now) {
     });
   }
 
-  // 30d sample points (1-2 per day)
   for (let d = 30; d >= 2; d--) {
     const ts = now - d * ONE_DAY;
     points.push({
@@ -260,7 +247,6 @@ function generateHistoryForMonitor(monitorId, now) {
     });
   }
 
-  // Sort chronologically ascending
   points.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
   return points;
 }
