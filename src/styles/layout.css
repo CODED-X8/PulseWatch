@@ -1,0 +1,216 @@
+/* Global App Shell & Responsive Layout Styles */
+
+.app-sidebar {
+  width: 240px;
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 16px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 100;
+}
+
+.app-topbar {
+  height: 60px;
+  background-color: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.nav-item:hover {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.nav-item.active {
+  background-color: rgba(99, 102, 241, 0.12);
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+/* Common Button Styles */
+button {
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: var(--accent-gradient);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+  transition: all var(--transition-fast);
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: var(--bg-surface-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-highlight);
+}
+
+.btn-danger {
+  background-color: rgba(244, 63, 94, 0.15);
+  color: var(--status-down);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: rgba(244, 63, 94, 0.25);
+}
+
+/* Card primitives */
+.card-surface {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--transition-fast);
+}
+
+.card-surface:hover {
+  border-color: var(--border-highlight);
+}
+
+/* Keyframe Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes shimmer {
+  0% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+  100% { opacity: 0.4; }
+}
+
+.skeleton-shimmer {
+  animation: shimmer 1.5s infinite ease-in-out;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.02); opacity: 0.75; }
+}
+
+.pulse-anim {
+  animation: pulseGlow 1.8s infinite ease-in-out;
+}
+
+/* Heartbeat ECG CSS Animations */
+.heartbeat-svg.ecg-steady path {
+  stroke-dasharray: 120;
+  stroke-dashoffset: 240;
+  animation: ecgDash 2.4s linear infinite;
+}
+
+.heartbeat-svg.ecg-irregular path {
+  stroke-dasharray: 140;
+  stroke-dashoffset: 280;
+  animation: ecgDash 1.2s linear infinite;
+}
+
+.heartbeat-svg.ecg-flat path {
+  opacity: 0.8;
+}
+
+@keyframes ecgDash {
+  from { stroke-dashoffset: 240; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* Mobile Tab Bar */
+.mobile-tab-bar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background-color: var(--bg-glass);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--border-subtle);
+  z-index: 100;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 12px;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 768px) {
+  .app-sidebar {
+    display: none;
+  }
+  .mobile-tab-bar {
+    display: flex;
+  }
+  .app-topbar {
+    padding: 0 16px;
+  }
+  main {
+    padding: 16px 12px 76px 12px !important;
+  }
+}
