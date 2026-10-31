@@ -175,7 +175,7 @@ export function SystemPage() {
               fontWeight: 600,
             }}
           >
-            {system?.workers ? `${system.workers.length} Nodes Active` : '—'}
+            {system?.workers ? `${system.workers.length} / 3 Nodes Active (Max: 3)` : '—'}
           </span>
         </div>
 

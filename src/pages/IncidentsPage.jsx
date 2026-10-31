@@ -180,12 +180,12 @@ export function IncidentsPage() {
                       </td>
 
                       <td className="font-mono text-muted" style={{ padding: '14px 18px' }}>
-                        {new Date(inc.startedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' })}
+                        {formatDate(inc.startedAt)}
                       </td>
 
                       <td className="font-mono text-muted" style={{ padding: '14px 18px' }}>
                         {inc.resolvedAt
-                          ? new Date(inc.resolvedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' })
+                          ? formatDate(inc.resolvedAt)
                           : <span style={{ color: 'var(--status-down)', fontWeight: 600 }}>Active Outage</span>}
                       </td>
 
@@ -204,11 +204,24 @@ export function IncidentsPage() {
   );
 }
 
+function parseDate(d) {
+  if (!d) return null;
+  const n = Number(d);
+  const dt = !isNaN(n) && n > 1000000000 ? new Date(n) : new Date(d);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+function formatDate(d) {
+  const dt = parseDate(d);
+  return dt ? dt.toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' }) : '—';
+}
+
 function calculateDuration(startStr, endStr) {
   if (!startStr) return '—';
-  const start = new Date(startStr).getTime();
-  const end = endStr ? new Date(endStr).getTime() : Date.now();
-  const diffSec = Math.max(0, Math.floor((end - start) / 1000));
+  const startDt = parseDate(startStr);
+  const endDt = endStr ? parseDate(endStr) : new Date();
+  if (!startDt || !endDt) return '—';
+  const diffSec = Math.max(0, Math.floor((endDt.getTime() - startDt.getTime()) / 1000));
   if (diffSec < 60) return `${diffSec}s`;
   const mins = Math.floor(diffSec / 60);
   const secs = diffSec % 60;

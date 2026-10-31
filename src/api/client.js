@@ -168,7 +168,7 @@ export const api = {
       lastCheckedAt: new Date().toISOString(),
       lastLatencyMs: 0,
       uptime24h: 100.0,
-      strip: Array(90).fill('up'),
+      strip: Array(90).fill('none'),
       heartbeat: 'steady',
     };
 

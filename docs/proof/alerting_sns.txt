@@ -1,0 +1,306 @@
+================================================================================
+PULSEWATCH ALERTING & WORKFLOW VERIFICATION PROOF (SNS + STEP FUNCTIONS + DYNAMODB)
+Captured: 2026-10-28 01:31 UTC (07:01 IST)
+Region: ap-south-1 | Profile: pulsewatch | AWS Account: 826903518995
+Topic ARN: arn:aws:sns:ap-south-1:826903518995:pulsewatch-alerts-topic
+Subscriber Endpoint: anandayush798@gmail.com (Confirmed Subscription)
+================================================================================
+
+1. SUBSCRIPTION CONFIRMATION STATUS
+--------------------------------------------------------------------------------
+Command:
+$ aws sns get-topic-attributes --topic-arn arn:aws:sns:ap-south-1:826903518995:pulsewatch-alerts-topic --profile pulsewatch --region ap-south-1
+$ aws sns list-subscriptions-by-topic --topic-arn arn:aws:sns:ap-south-1:826903518995:pulsewatch-alerts-topic --profile pulsewatch --region ap-south-1
+
+Output:
+{
+    "Attributes": {
+        "SubscriptionsConfirmed": "1",
+        "SubscriptionsPending": "0",
+        "KmsMasterKeyId": "arn:aws:kms:ap-south-1:826903518995:key/70ec4ea9-4403-4f3f-857c-2b290f9d5f18",
+        "TopicArn": "arn:aws:sns:ap-south-1:826903518995:pulsewatch-alerts-topic"
+    }
+}
+{
+    "Subscriptions": [
+        {
+            "SubscriptionArn": "arn:aws:sns:ap-south-1:826903518995:pulsewatch-alerts-topic:f63f189e-ef82-427f-8383-bc3de31b4caa",
+            "Owner": "826903518995",
+            "Protocol": "email",
+            "Endpoint": "anandayush798@gmail.com",
+            "TopicArn": "arn:aws:sns:ap-south-1:826903518995:pulsewatch-alerts-topic"
+        }
+    ]
+}
+
+
+2. FAILED SYNTHETIC CHECK RECORD IN DYNAMODB (pulsewatch-checks)
+--------------------------------------------------------------------------------
+Command:
+$ aws dynamodb query --table-name pulsewatch-checks \
+    --key-condition-expression "monitor_id = :mid" \
+    --expression-attribute-values '{":mid":{"S":"76fad97c-d320-45d4-acf0-e4308679c58a"}}' \
+    --no-scan-index-forward --limit 1 --profile pulsewatch --region ap-south-1
+
+Output:
+{
+    "Items": [
+        {
+            "user_id": {
+                "S": "b946825c-fd81-4cb0-ae40-2a99d66c6c44"
+            },
+            "monitor_name": {
+                "S": "Victim Host Internal"
+            },
+            "latency_ms": {
+                "N": "1"
+            },
+            "status": {
+                "S": "down"
+            },
+            "monitor_id": {
+                "S": "76fad97c-d320-45d4-acf0-e4308679c58a"
+            },
+            "ttl": {
+                "N": "1795743015"
+            },
+            "http_code": {
+                "N": "0"
+            },
+            "source": {
+                "S": "scheduled"
+            },
+            "url": {
+                "S": "http://10.1.1.111/healthz"
+            },
+            "error": {
+                "S": "HTTPConnectionPool(host='10.1.1.111', port=80): Max retries exceeded with url: /healthz (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fefe41ed2e0>: Failed to establish a new connection: [Errno 111] Connection refused'))"
+            },
+            "ts_iso": {
+                "S": "2026-10-28T01:30:15.648749+00:00"
+            },
+            "ts": {
+                "N": "1793151015557"
+            }
+        }
+    ]
+}
+
+
+3. STEP FUNCTIONS WORKFLOW EXECUTION DETAILS
+--------------------------------------------------------------------------------
+State Machine: arn:aws:states:ap-south-1:826903518995:stateMachine:pulsewatch-incident-workflow
+Execution Name: inc-76fad97c-d320-45-1793151015557
+Execution ARN:  arn:aws:states:ap-south-1:826903518995:execution:pulsewatch-incident-workflow:inc-76fad97c-d320-45-1793151015557
+Start Timestamp: 2026-10-28T07:00:18.497000+05:30 (01:30:18.497 UTC)
+Stop Timestamp:  2026-10-28T07:01:10.070000+05:30 (01:31:10.070 UTC)
+Final Status:    SUCCEEDED
+
+Workflow Input:
+{
+  "monitorId": "76fad97c-d320-45d4-acf0-e4308679c58a",
+  "userId": "b946825c-fd81-4cb0-ae40-2a99d66c6c44",
+  "monitorName": "Victim Host Internal",
+  "url": "http://10.1.1.111/healthz",
+  "error": "HTTPConnectionPool(host='10.1.1.111', port=80): Max retries exceeded with url: /healthz (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fefe41ed2e0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+  "startedAt": 1793151015557
+}
+
+Traversed State Progression:
+- 07:00:18.517 -> State: MarkSuspected (DynamoDB update STATE: SUSPECTED)
+- 07:00:18.622 -> State: WaitBeforeRecheck (5-second delay, recheck_wait_seconds=5)
+- 07:00:23.659 -> State: ExecuteRecheck (Task token sent to worker fleet via SQS)
+- 07:00:23.842 -> State: EvaluateRecheck (Recheck returned ok=false)
+- 07:00:23.842 -> State: ConfirmDownState (DynamoDB update STATE: DOWN)
+- 07:00:24.021 -> State: RecordIncidentForUI (DynamoDB put item_id=INC#1793151015557, user_id, state=CONFIRMED)
+- 07:00:24.127 -> State: SendDownAlert (SNS publish DOWN alert email)
+- 07:00:24.245 -> State: InitRecovery (recoveryCount initialized to 0)
+- 07:00:24.245 -> State: WaitRecovery (15-second delay, recovery_poll_seconds=15)
+- 07:00:39.288 -> State: RecoveryCheck #1 (Probe returned ok=false)
+- 07:00:39.432 -> State: IncrementRecovery (recoveryCount = 1)
+- 07:00:39.432 -> State: WaitRecovery (15-second delay)
+- 07:00:54.464 -> State: RecoveryCheck #2 (Probe returned ok=false)
+- 07:00:54.589 -> State: IncrementRecovery (recoveryCount = 2)
+- 07:00:54.589 -> State: WaitRecovery (15-second delay)
+  [Site restored at 07:01:00.879 IST / 01:31:00.879 UTC]
+- 07:01:09.616 -> State: RecoveryCheck #3 (Probe returned ok=true, HTTP 200)
+- 07:01:09.768 -> State: EvaluateRecovery -> branched to MarkResolved
+- 07:01:09.768 -> State: MarkResolved (DynamoDB update STATE: UP)
+- 07:01:09.871 -> State: UpdateIncidentRecordResolved (DynamoDB update INC# item: state=RESOLVED, resolvedAt=$$.State.EnteredTime)
+- 07:01:09.964 -> State: SendRecoveryAlert (SNS publish RECOVERED alert email)
+- 07:01:10.056 -> State: OutageResolved (Succeed state)
+
+
+4. SNS ALERT MESSAGES DELIVERED
+--------------------------------------------------------------------------------
+A. DOWN ALERT EMAIL:
+- SNS MessageId: e7082d8f-30e7-57f2-9fb3-4ed462970c71
+- Timestamp: 2026-10-28T07:00:24.233000+05:30 (01:30:24.233 UTC)
+- Subject: [CRITICAL] PulseWatch Outage Alert: Victim Host Internal
+- Message Content:
+--------------------------------------------------------------------------------
+CRITICAL ALERT: PulseWatch has confirmed an outage for Victim Host Internal.
+
+Monitor Details:
+- Name: Victim Host Internal
+- URL: http://10.1.1.111/healthz
+- Incident ID: inc-1793151015557
+- Started At (Unix): 1793151015557
+
+Failure Breakdown:
+- Scheduled Probe 1: HTTPConnectionPool(host='10.1.1.111', port=80): Max retries exceeded with url: /healthz (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fefe41ed2e0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+- Fleet Re-check 2: Failed / Non-200
+
+The service has been marked DOWN and recovery polling is active.
+--------------------------------------------------------------------------------
+
+B. RECOVERED ALERT EMAIL:
+- SNS MessageId: 88396168-55b6-5512-a2a7-023307285016
+- Timestamp: 2026-10-28T07:01:10.056000+05:30 (01:31:10.056 UTC)
+- Subject: [RESOLVED] PulseWatch Recovery Alert: Victim Host Internal
+- Message Content:
+--------------------------------------------------------------------------------
+OUTAGE RESOLVED: Target Victim Host Internal (http://10.1.1.111/healthz) has recovered and is returning HTTP 200.
+
+Incident Summary:
+- Monitor Name: Victim Host Internal
+- URL: http://10.1.1.111/healthz
+- Incident ID: inc-1793151015557
+- Status: RESOLVED
+- Recovery Check Cycles: 2
+- Polling Interval: 15s per cycle
+--------------------------------------------------------------------------------
+
+
+5. INCIDENT RECORD IN DYNAMODB (pulsewatch-incidents)
+--------------------------------------------------------------------------------
+Command:
+$ aws dynamodb get-item --table-name pulsewatch-incidents \
+    --key '{"monitor_id":{"S":"76fad97c-d320-45d4-acf0-e4308679c58a"},"item_id":{"S":"INC#1793151015557"}}' \
+    --profile pulsewatch --region ap-south-1
+
+Output:
+{
+    "Item": {
+        "incidentId": {
+            "S": "inc-1793151015557"
+        },
+        "monitorName": {
+            "S": "Victim Host Internal"
+        },
+        "monitor_id": {
+            "S": "76fad97c-d320-45d4-acf0-e4308679c58a"
+        },
+        "resolvedAt": {
+            "S": "2026-10-28T01:31:09.871Z"
+        },
+        "rootCause": {
+            "S": "HTTPConnectionPool(host='10.1.1.111', port=80): Max retries exceeded with url: /healthz (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fefe41ed2e0>: Failed to establish a new connection: [Errno 111] Connection refused'))"
+        },
+        "startedAt": {
+            "S": "1793151015557"
+        },
+        "state": {
+            "S": "RESOLVED"
+        },
+        "user_id": {
+            "S": "b946825c-fd81-4cb0-ae40-2a99d66c6c44"
+        },
+        "item_id": {
+            "S": "INC#1793151015557"
+        }
+    }
+}
+
+
+6. API ENDPOINT RESPONSES
+--------------------------------------------------------------------------------
+A. Incidents Endpoint (/api/incidents):
+Command:
+$ curl -s -H "Authorization: Bearer <TOKEN>" http://pulsewatch-alb-2049379350.ap-south-1.elb.amazonaws.com/api/incidents | jq .
+
+Output:
+[
+  {
+    "id": "inc-1793151015557",
+    "monitorId": "76fad97c-d320-45d4-acf0-e4308679c58a",
+    "monitorName": "Victim Host Internal",
+    "startedAt": "2026-10-28T01:30:15.557000+00:00",
+    "resolvedAt": "2026-10-28T01:31:09.871Z",
+    "state": "RESOLVED",
+    "rootCause": "HTTPConnectionPool(host='10.1.1.111', port=80): Max retries exceeded with url: /healthz (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fefe41ed2e0>: Failed to establish a new connection: [Errno 111] Connection refused'))"
+  }
+]
+
+B. Monitors Endpoint (/api/monitors) Transition & 90-Day Strip:
+Command:
+$ curl -s -H "Authorization: Bearer <TOKEN>" http://pulsewatch-alb-2049379350.ap-south-1.elb.amazonaws.com/api/monitors | jq '.[] | select(.id=="76fad97c-d320-45d4-acf0-e4308679c58a")'
+
+Output:
+{
+  "id": "76fad97c-d320-45d4-acf0-e4308679c58a",
+  "name": "Victim Host Internal",
+  "url": "http://10.1.1.111/healthz",
+  "intervalMin": 5,
+  "expectedStatus": 200,
+  "timeoutSec": 5,
+  "state": "UP",
+  "lastCheckedAt": "2026-10-28T01:30:15.648749+00:00",
+  "lastLatencyMs": 1,
+  "uptime24h": 75.76,
+  "strip": [
+    "none", "none", "none", "none", "none", "none", "none", "none", "none", "none",
+    "none", "none", "none", "none", "none", "none", "none", "none", "none", "none",
+    "none", "none", "none", "none", "none", "none", "none", "none", "none", "none",
+    "none", "none", "none", "none", "none", "none", "none", "none", "none", "none",
+    "none", "none", "none", "none", "none", "none", "none", "none", "none", "none",
+    "none", "none", "none", "none", "none", "none", "none",
+    "up", "up", "up", "up", "up", "up", "down", "down", "down", "up", "up", "up",
+    "up", "up", "down", "down", "down", "down", "up", "up", "up", "up", "up", "up",
+    "up", "up", "up", "up", "up", "up", "up", "up", "down"
+  ],
+  "heartbeat": "steady"
+}
+
+
+7. EXACT MEASURED TIMINGS & ARCHITECTURE TRADE-OFF
+--------------------------------------------------------------------------------
+Timestamps:
+- T0 (Initial synthetic check failure recorded):  2026-10-28T01:30:15.557Z
+- T1 (Step Functions execution started):          2026-10-28T01:30:18.497Z
+- T2 (DOWN alert published to SNS & recipient):   2026-10-28T01:30:24.233Z
+- T3 (Victim service restored / Nginx started):   2026-10-28T01:31:00.879Z
+- T4 (RECOVERED alert published to SNS):          2026-10-28T01:31:10.056Z
+
+Measured Latencies:
+- Failure to Alert Dispatch (T2 - T0): 8.676 seconds (~8.7s)
+  Breakdown:
+  * DynamoDB Stream insertion to Lambda filter trigger: ~2.94s
+  * MarkSuspected state DynamoDB write:                 ~0.10s
+  * WaitBeforeRecheck state delay:                      ~5.00s
+  * ExecuteRecheck task token SQS round-trip to worker: ~0.18s
+  * ConfirmDownState DynamoDB write:                    ~0.18s
+  * RecordIncidentForUI DynamoDB write:                 ~0.10s
+  * SendDownAlert SNS KMS publish call:                 ~0.11s
+
+- Restoration to Recovery Alert (T4 - T3): 9.177 seconds (~9.2s)
+  Breakdown:
+  * Nginx restored at 01:31:00.879 during 15s WaitRecovery cycle
+  * State machine woke up at 01:31:09.616 (8.74s after Nginx start)
+  * RecoveryCheck executed probe (succeeded with HTTP 200 in 2ms)
+  * MarkResolved + UpdateIncidentRecordResolved written to DynamoDB: ~0.20s
+  * SendRecoveryAlert SNS publish completed: ~0.09s (Total elapsed: 9.18s)
+
+Trade-off Explanation:
+The simplified 5-second wait plus single fleet re-check probe is the optimal architectural
+trade-off for production uptime monitoring:
+1. False Positive Suppression: Network jitter, transient TCP handshake resets, and brief
+   garbage collection pauses routinely fail single HTTP requests in distributed systems.
+   Alerting on a single failed check causes engineer pager fatigue.
+2. Minimal Alert Latency: Inserting a 5-second wait before a single fleet re-check probe
+   trades only ~5 seconds of detection latency to ensure every alert is an actionable,
+   confirmed failure.
+3. Cost and Throughput Efficiency: Requiring 1 re-check probe instead of multiple iterations
+   halves unnecessary SQS task messages, eliminates worker fleet re-check queuing delay,
+   and prevents state machine execution thrashing.
+================================================================================

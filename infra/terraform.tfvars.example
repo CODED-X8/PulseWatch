@@ -1,0 +1,5 @@
+aws_region  = "ap-south-1"
+environment = "prod"
+admin_email = "admin@example.com"
+alert_email = "alerts@example.com"
+enable_nat  = false

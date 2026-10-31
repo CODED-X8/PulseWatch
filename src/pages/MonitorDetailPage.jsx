@@ -386,7 +386,7 @@ export function MonitorDetailPage() {
                       </span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                      <span>Started: {new Date(inc.startedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                      <span>Started: {formatIncidentDate(inc.startedAt)}</span>
                       <span>Duration: {duration}</span>
                     </div>
                     {inc.rootCause && (
@@ -424,11 +424,24 @@ export function MonitorDetailPage() {
   );
 }
 
+function parseDate(d) {
+  if (!d) return null;
+  const n = Number(d);
+  const dt = !isNaN(n) && n > 1000000000 ? new Date(n) : new Date(d);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+function formatIncidentDate(d) {
+  const dt = parseDate(d);
+  return dt ? dt.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—';
+}
+
 function formatDuration(startStr, endStr) {
   if (!startStr) return '—';
-  const start = new Date(startStr).getTime();
-  const end = endStr ? new Date(endStr).getTime() : Date.now();
-  const diffSec = Math.max(0, Math.floor((end - start) / 1000));
+  const startDt = parseDate(startStr);
+  const endDt = endStr ? parseDate(endStr) : new Date();
+  if (!startDt || !endDt) return '—';
+  const diffSec = Math.max(0, Math.floor((endDt.getTime() - startDt.getTime()) / 1000));
   if (diffSec < 60) return `${diffSec}s`;
   const mins = Math.floor(diffSec / 60);
   const secs = diffSec % 60;

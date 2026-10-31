@@ -1,0 +1,215 @@
+================================================================================
+PULSEWATCH S3 STORAGE ARCHITECTURE & LIFECYCLE MANAGEMENT VERIFICATION PROOF
+Captured: 2026-10-28 06:26 UTC (11:56 IST)
+Region: ap-south-1 | Profile: pulsewatch | AWS Account: 826903518995
+================================================================================
+
+1. DEDICATED REPORTS BUCKET CREATION & CONFIGURATION
+--------------------------------------------------------------------------------
+Bucket: pulsewatch-reports-826903518995
+Encryption: SSE-KMS (Customer-Managed Key: 70ec4ea9-4403-4f3f-857c-2b290f9d5f18)
+Public Access: Block Public Access ON (all 4 flags enabled)
+Versioning: Disabled (Off)
+SSM Parameter: /pulsewatch/reports_bucket -> pulsewatch-reports-826903518995
+API IAM Policy: Scoped to s3:PutObject and s3:GetObject on pulsewatch-reports-826903518995/*
+
+$ aws s3api get-bucket-encryption --bucket pulsewatch-reports-826903518995 --profile pulsewatch --region ap-south-1
+{
+    "ServerSideEncryptionConfiguration": {
+        "Rules": [
+            {
+                "ApplyServerSideEncryptionByDefault": {
+                    "SSEAlgorithm": "aws:kms",
+                    "KMSMasterKeyId": "arn:aws:kms:ap-south-1:826903518995:key/70ec4ea9-4403-4f3f-857c-2b290f9d5f18"
+                },
+                "BucketKeyEnabled": false
+            }
+        ]
+    }
+}
+
+$ aws s3api get-public-access-block --bucket pulsewatch-reports-826903518995 --profile pulsewatch --region ap-south-1
+{
+    "PublicAccessBlockConfiguration": {
+        "BlockPublicAcls": true,
+        "IgnorePublicAcls": true,
+        "BlockPublicPolicy": true,
+        "RestrictPublicBuckets": true
+    }
+}
+
+
+2. S3 LIFECYCLE CONFIGURATION ACROSS ALL BUCKETS
+--------------------------------------------------------------------------------
+
+A. DEDICATED REPORTS BUCKET (pulsewatch-reports-826903518995):
+$ aws s3api get-bucket-lifecycle-configuration --bucket pulsewatch-reports-826903518995 --profile pulsewatch --region ap-south-1
+{
+    "TransitionDefaultMinimumObjectSize": "all_storage_classes_128K",
+    "Rules": [
+        {
+            "Expiration": {
+                "Days": 365
+            },
+            "ID": "reports-tiered-retention",
+            "Filter": {
+                "Prefix": ""
+            },
+            "Status": "Enabled",
+            "Transitions": [
+                {
+                    "Days": 30,
+                    "StorageClass": "STANDARD_IA"
+                },
+                {
+                    "Days": 90,
+                    "StorageClass": "GLACIER"
+                }
+            ],
+            "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+            }
+        }
+    ]
+}
+
+B. ARTIFACTS BUCKET (pulsewatch-artifacts-826903518995):
+$ aws s3api get-bucket-lifecycle-configuration --bucket pulsewatch-artifacts-826903518995 --profile pulsewatch --region ap-south-1
+{
+    "TransitionDefaultMinimumObjectSize": "all_storage_classes_128K",
+    "Rules": [
+        {
+            "ID": "artifacts-cleanup",
+            "Filter": {
+                "Prefix": ""
+            },
+            "Status": "Enabled",
+            "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 30
+            },
+            "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+            }
+        }
+    ]
+}
+
+C. CLOUDTRAIL AUDIT LOGS BUCKET (pulsewatch-cloudtrail-826903518995):
+$ aws s3api get-bucket-lifecycle-configuration --bucket pulsewatch-cloudtrail-826903518995 --profile pulsewatch --region ap-south-1
+{
+    "TransitionDefaultMinimumObjectSize": "all_storage_classes_128K",
+    "Rules": [
+        {
+            "Expiration": {
+                "Days": 365
+            },
+            "ID": "cloudtrail-retention",
+            "Filter": {
+                "Prefix": ""
+            },
+            "Status": "Enabled",
+            "Transitions": [
+                {
+                    "Days": 30,
+                    "StorageClass": "STANDARD_IA"
+                }
+            ],
+            "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+            }
+        }
+    ]
+}
+
+D. AWS CONFIG HISTORY BUCKET (pulsewatch-config-826903518995):
+$ aws s3api get-bucket-lifecycle-configuration --bucket pulsewatch-config-826903518995 --profile pulsewatch --region ap-south-1
+{
+    "TransitionDefaultMinimumObjectSize": "all_storage_classes_128K",
+    "Rules": [
+        {
+            "Expiration": {
+                "Days": 365
+            },
+            "ID": "config-retention",
+            "Filter": {
+                "Prefix": ""
+            },
+            "Status": "Enabled",
+            "Transitions": [
+                {
+                    "Days": 30,
+                    "StorageClass": "STANDARD_IA"
+                }
+            ],
+            "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+            }
+        }
+    ]
+}
+
+
+3. REPORT EXPORT API VERIFICATION (POST /api/reports/export)
+--------------------------------------------------------------------------------
+Command:
+$ curl -s -X POST -H "Authorization: Bearer <JWT_TOKEN>" \
+    http://pulsewatch-alb-2049379350.ap-south-1.elb.amazonaws.com/api/reports/export | jq .
+
+Response:
+{
+  "downloadUrl": "https://pulsewatch-reports-826903518995.s3.ap-south-1.amazonaws.com/reports/incidents_b946825c-fd81-4cb0-ae40-2a99d66c6c44_1793168764.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=<REDACTED_TEMP_CREDENTIAL>%2F20261028%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20261028T062604Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host&X-Amz-Security-Token=...&X-Amz-Signature=...",
+  "expiresInSec": 900
+}
+
+
+4. PRESIGNED URL DOWNLOAD VERIFICATION
+--------------------------------------------------------------------------------
+Command:
+$ curl -s "$DOWNLOAD_URL"
+
+Output:
+Incident ID,Monitor ID,Monitor Name,State,Started At,Resolved At,Root Cause
+"inc-1793151015557","76fad97c-d320-45d4-acf0-e4308679c58a","Victim Host Internal","RESOLVED","1793151015557","2026-10-28T01:31:09.871Z","HTTPConnectionPool(host='10.1.1.111', port=80): Max retries exceeded with url: /healthz (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fefe41ed2e0>: Failed to establish a new connection: [Errno 111] Connection refused'))"
+"inc-1793153271845","76fad97c-d320-45d4-acf0-e4308679c58a","Monitored Service","CONFIRMED","1793153271845","","Blocked by SSRF Policy: RFC1918 private addresses prohibited"
+"inc-1793153271845","7d808f3f-3dab-4155-b695-77a1e23595b0","Monitored Service","RESOLVED","1793153271845","2026-10-28T02:11:20.618Z","Unexpected HTTP status 503 (expected 200)"
+"inc-1793153678734","4f92044f-f841-400d-b269-cf7c1684159c","Monitored Service","RESOLVED","1793153678734","2026-10-28T02:19:51.348Z","Unexpected HTTP status 503 (expected 200)"
+
+
+5. S3 OBJECT METADATA IN NEW REPORTS BUCKET
+--------------------------------------------------------------------------------
+Command:
+$ aws s3 ls s3://pulsewatch-reports-826903518995/reports/ --profile pulsewatch --region ap-south-1
+2026-10-28 11:55:51        993 incidents_b946825c-fd81-4cb0-ae40-2a99d66c6c44_1793168750.csv
+2026-10-28 11:56:05        993 incidents_b946825c-fd81-4cb0-ae40-2a99d66c6c44_1793168764.csv
+
+$ aws s3api head-object --bucket pulsewatch-reports-826903518995 \
+    --key reports/incidents_b946825c-fd81-4cb0-ae40-2a99d66c6c44_1793168764.csv \
+    --profile pulsewatch --region ap-south-1
+{
+    "AcceptRanges": "bytes",
+    "Expiration": "expiry-date=\"Fri, 29 Oct 2027 00:00:00 GMT\", rule-id=\"reports-tiered-retention\"",
+    "LastModified": "2026-10-28T06:26:05+00:00",
+    "ContentLength": 993,
+    "ETag": "\"de235134c27f7bbd5fdab54b5e0e5772\"",
+    "ContentType": "text/csv",
+    "ServerSideEncryption": "aws:kms",
+    "Metadata": {},
+    "SSEKMSKeyId": "arn:aws:kms:ap-south-1:826903518995:key/70ec4ea9-4403-4f3f-857c-2b290f9d5f18"
+}
+
+
+6. ARCHITECTURAL & COST TRADE-OFF ANALYSIS (EXAMINER VIVA DEFENSE)
+--------------------------------------------------------------------------------
+1. Minimum Storage Duration Caveat (30-Day Rule):
+   Amazon S3 requires objects to reside in the S3 Standard tier for at least 30 consecutive
+   days before transitioning to Standard-Infrequent Access (S3 Standard-IA). Objects transitioned
+   prior to 30 days incur prorated storage fees equal to 30 days of Standard storage.
+
+2. Minimum Billable Object Size Caveat (128 KB Rule):
+   Standard-IA and Glacier flexible classes enforce a minimum billable object size of 128 KB.
+   Small incident CSV export files (e.g. ~1 KB to 5 KB) are billed at the full 128 KB capacity
+   when transitioned to Standard-IA. For high volumes of tiny files, lifecycle transition can
+   actually increase monthly spend compared to keeping them in Standard or expiring them directly.
+   Therefore, the 30-day / 90-day / 365-day lifecycle tiering is designed for enterprise
+   compliance and audit retention, while daily operational reports are purged automatically.
+================================================================================

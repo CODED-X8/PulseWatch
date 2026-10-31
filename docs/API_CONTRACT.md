@@ -235,7 +235,7 @@ Generates a pre-signed S3 download link for an incident CSV report.
 **Response (200 OK):**
 ```json
 {
-  "downloadUrl": "https://pulsewatch-reports.s3.ap-south-1.amazonaws.com/incident_audit.csv?AWSAccessKeyId=...",
+  "downloadUrl": "https://pulsewatch-reports-826903518995.s3.ap-south-1.amazonaws.com/reports/incidents_<user_id>_<ts>.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=...&X-Amz-Date=...&X-Amz-Expires=900&X-Amz-SignedHeaders=host&X-Amz-Signature=...",
   "expiresInSec": 900
 }
 ```
@@ -270,3 +270,39 @@ The worker Auto Scaling Group is configured for `min: 1`, `max: 3` instances.
 ### `GET /api/health`
 Health check probe endpoint.
 **Response (200 OK):** `{"ok": true}`
+
+---
+
+## 6. System Load Testing & Demo Additions (Contract Additions)
+
+> **Note**: The following endpoint is a designated operational extension required for viva demonstration of the Auto Scaling Group worker fleet and SQS queue depth triggers.
+
+### `POST /api/system/load-test`
+Spikes synthetic check messages into SQS to trigger CloudWatch alarm-based step scaling on the Worker Auto Scaling Group. Access is restricted to users whose email matches `ADMIN_EMAIL` configured in SSM Parameter Store.
+
+**Headers:**
+```http
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "count": 50
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "enqueued": 50,
+  "queue": "pulsewatch-check-queue",
+  "status": "LOAD_TEST_DISPATCHED"
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized`: Token missing or invalid.
+- `403 Forbidden`: Authenticated user is not an administrator.
+- `400 Bad Request`: Invalid count (must be between 1 and 200).

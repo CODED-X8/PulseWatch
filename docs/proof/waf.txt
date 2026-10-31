@@ -1,0 +1,42 @@
+=== AWS WAFv2 Web ACL Live Demonstration Proof ===
+Start Timestamp: Tue Oct 27 10:50:28 AM UTC 2026
+
+1. Verifying WAF Association with ALB...
+Attached Web ACL ID: f186dd29-3b9b-4982-9ac4-c6a2f486a5a7
+Attached Web ACL ARN: arn:aws:wafv2:ap-south-1:826903518995:regional/webacl/pulsewatch-alb-waf/f186dd29-3b9b-4982-9ac4-c6a2f486a5a7
+
+2. Testing Legitimate HTTP Request (Expect HTTP 200)...
+HTTP/1.1 200 OK
+Date: Tue, 27 Oct 2026 10:50:29 GMT
+Content-Type: application/json
+Content-Length: 11
+Connection: keep-alive
+
+3. Testing Malicious Attack Vector (Directory Traversal triggering AWSManagedRulesCommonRuleSet)...
+HTTP/1.1 403 Forbidden
+Server: awselb/2.0
+Date: Tue, 27 Oct 2026 10:50:29 GMT
+Content-Type: text/html
+Content-Length: 118
+
+4. Testing Malicious SQL Injection Vector...
+HTTP/1.1 200 OK
+Date: Tue, 27 Oct 2026 10:50:29 GMT
+Content-Type: application/json
+Content-Length: 11
+Connection: keep-alive
+
+5. Capturing WAF Web ACL Configuration & Metrics...
+{
+    "Name": "pulsewatch-alb-waf",
+    "Rules": [
+        "AWSManagedRulesCommonRuleSet"
+    ],
+    "MetricName": "PulseWatchWebAclMetric"
+}
+
+6. Destroying WAFv2 Web ACL to eliminate hourly billing...
+
+7. Verifying WAFv2 is Completely Destroyed...
+Active Regional WebACL count: 0
+End Timestamp: Tue Oct 27 10:50:46 AM UTC 2026

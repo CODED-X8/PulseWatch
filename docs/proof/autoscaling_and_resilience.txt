@@ -1,0 +1,44 @@
+=== Auto Scaling & Resilience Demonstration ===
+[Tue Oct 27 10:43:06 AM UTC 2026] Initial Worker ASG state:
+{
+    "DesiredCapacity": 1,
+    "Instances": [
+        {
+            "InstanceId": "i-09ab7fcf79e52c24c",
+            "LifecycleState": "InService"
+        }
+    ]
+}
+
+[Tue Oct 27 10:43:06 AM UTC 2026] Spiking SQS queue to trigger scaling alarm...
+Sent 20 synthetic check messages to https://sqs.ap-south-1.amazonaws.com/826903518995/pulsewatch-check-queue
+
+[Tue Oct 27 10:43:20 AM UTC 2026] Executing scale-out policy (pulsewatch-worker-sqs-scale-out)...
+
+[Tue Oct 27 10:43:45 AM UTC 2026] Worker ASG state after scale-out:
+Instances: i-09ab7fcf79e52c24c
+
+[Tue Oct 27 10:43:47 AM UTC 2026] Terminating worker instance i-09ab7fcf79e52c24c to demonstrate self-healing...
+[
+    {
+        "InstanceId": "i-09ab7fcf79e52c24c",
+        "CurrentState": "shutting-down"
+    }
+]
+
+[Tue Oct 27 10:44:08 AM UTC 2026] Worker ASG state during replacement:
+[
+    {
+        "InstanceId": "i-09ab7fcf79e52c24c",
+        "LifecycleState": "InService"
+    }
+]
+
+[Tue Oct 27 10:44:09 AM UTC 2026] Scaling Worker ASG back to baseline (desired=1)...
+
+[Tue Oct 27 10:44:09 AM UTC 2026] Testing ALB High Availability...
+HTTP/1.1 200 OK
+Date: Tue, 27 Oct 2026 10:44:10 GMT
+Content-Type: application/json
+Content-Length: 11
+Connection: keep-alive

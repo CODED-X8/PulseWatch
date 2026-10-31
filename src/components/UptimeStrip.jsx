@@ -8,12 +8,22 @@ import React, { useState } from 'react';
 export function UptimeStrip({ strip = [], height = 28, showLabels = true }) {
   const [hoverIndex, setHoverIndex] = useState(null);
 
-  // Guarantee 90 items
+  // Guarantee 90 items padded with 'none' for days without telemetry
   const normalized = [...strip];
   while (normalized.length < 90) {
-    normalized.unshift('up');
+    normalized.unshift('none');
   }
   const displayStrip = normalized.slice(-90);
+
+  // Calculate uptime percentage ONLY using days with actual data
+  const dataDays = displayStrip.filter((s) => s === 'up' || s === 'down');
+  const upDays = dataDays.filter((s) => s === 'up').length;
+  const uptimePercent =
+    dataDays.length > 0 ? (upDays / dataDays.length) * 100 : 100;
+  const formattedUptime =
+    uptimePercent === 100
+      ? '100% Uptime'
+      : `${uptimePercent.toFixed(1)}% Uptime`;
 
   return (
     <div className="uptime-strip-container" style={{ position: 'relative', width: '100%' }}>
@@ -34,7 +44,7 @@ export function UptimeStrip({ strip = [], height = 28, showLabels = true }) {
             bg = 'var(--status-down)';
             label = 'Degraded / Unreachable';
           } else if (status === 'none') {
-            bg = 'var(--border-subtle)';
+            bg = '#4b5563'; // Neutral grey for days with no data
             label = 'No telemetry recorded';
           }
 
@@ -50,7 +60,7 @@ export function UptimeStrip({ strip = [], height = 28, showLabels = true }) {
                 height: '100%',
                 backgroundColor: bg,
                 borderRadius: '2px',
-                opacity: isHovered ? 1 : 0.82,
+                opacity: isHovered ? 1 : status === 'none' ? 0.45 : 0.85,
                 transform: isHovered ? 'scaleY(1.15)' : 'scaleY(1)',
                 transition: 'all 120ms ease-out',
                 cursor: 'pointer',
@@ -85,11 +95,17 @@ export function UptimeStrip({ strip = [], height = 28, showLabels = true }) {
               color:
                 displayStrip[hoverIndex] === 'down'
                   ? 'var(--status-down)'
+                  : displayStrip[hoverIndex] === 'none'
+                  ? '#9ca3af'
                   : 'var(--status-up)',
               fontWeight: 600,
             }}
           >
-            {displayStrip[hoverIndex] === 'down' ? 'Downtime Incident' : 'Operational (100%)'}
+            {displayStrip[hoverIndex] === 'down'
+              ? 'Downtime Incident'
+              : displayStrip[hoverIndex] === 'none'
+              ? 'No Data'
+              : 'Operational (100%)'}
           </span>
         </div>
       )}
@@ -106,7 +122,9 @@ export function UptimeStrip({ strip = [], height = 28, showLabels = true }) {
           }}
         >
           <span>90 days ago</span>
-          <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>99.9% Uptime</span>
+          <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
+            {formattedUptime}
+          </span>
           <span>Today</span>
         </div>
       )}
